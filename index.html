@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Phòng họp trực tuyến</title>
+  <style>
+    video { width: 800px; height:600px;  margin: 50px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h2>Phòng họp trực tuyến đơn giản</h2>
+  <input id="room" placeholder="Nhập tên phòng">
+  <button id="joinBtn">Tham gia</button>
+  <div>
+    <video id="localVideo" autoplay muted playsinline></video>
+    <div id="remoteVideos"></div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
