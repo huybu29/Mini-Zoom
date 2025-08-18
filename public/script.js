@@ -4,6 +4,16 @@ const remoteVideos = document.getElementById('remoteVideos');
 let localStream;
 let peers = {};
 
+let screenTrack = null;
+let myName = '';
+let myRoom = '';
+
+const joinBtn = document.getElementById('joinBtn');
+const leaveBtn = document.getElementById('leaveBtn');
+const micBtn = document.getElementById('micBtn');
+const camBtn = document.getElementById('camBtn');
+const shareBtn = document.getElementById('shareBtn');
+
 document.getElementById('joinBtn').onclick = async () => {
   const room = document.getElementById('room').value;
   if (!room) return alert('Nhập tên phòng!');
@@ -71,3 +81,106 @@ function createPeer(peerId) {
   peers[peerId] = pc;
   return pc;
 }
+
+
+joinBtn.onclick = async () => {
+  const room = roomInput.value.trim();
+  if (!room) return alert('Nhập tên phòng!');
+  if (localStream) return;
+
+  myName = (nameInput.value || '').trim() || 'Me';
+  myRoom = room;
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  } catch (e) {
+    console.error(e);
+    return alert('Không truy cập được camera/mic.');
+  }
+
+  // Hiển thị video local
+  addVideoEl('local', myName + ' (you)', localStream, true);
+
+  socket.emit('join', { room, name: myName });
+
+  leaveBtn.disabled = false;
+  micBtn.disabled = false;
+  camBtn.disabled = false;
+  shareBtn.disabled = false;
+  joinBtn.disabled = true;
+  roomInput.disabled = true;
+  nameInput.disabled = true;
+};
+
+leaveBtn.onclick = () => {
+  socket.emit('leave');
+  Object.keys(peers).forEach(id => cleanupPeer(id));
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+  }
+  localStream = null;
+  screenTrack = null;
+  removePeerUI('local');
+
+  joinBtn.disabled = false;
+  roomInput.disabled = false;
+  nameInput.disabled = false;
+
+  leaveBtn.disabled = true;
+  micBtn.disabled = true;
+  camBtn.disabled = true;
+  shareBtn.disabled = true;
+};
+
+micBtn.onclick = () => {
+  if (!localStream) return;
+  const track = localStream.getAudioTracks()[0];
+  if (track) {
+    track.enabled = !track.enabled;
+    micBtn.textContent = track.enabled ? 'Tắt mic' : 'Bật mic';
+  }
+};
+
+camBtn.onclick = () => {
+  if (!localStream) return;
+  const track = localStream.getVideoTracks()[0];
+  if (track) {
+    track.enabled = !track.enabled;
+    camBtn.textContent = track.enabled ? 'Tắt cam' : 'Bật cam';
+  }
+};
+
+shareBtn.onclick = async () => {
+  if (!localStream) return;
+  try {
+    const display = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    screenTrack = display.getVideoTracks()[0];
+
+    for (const id of Object.keys(peers)) {
+      const sender = peers[id].pc.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) await sender.replaceTrack(screenTrack);
+    }
+
+    const localVideo = document.getElementById('video-local');
+    if (localVideo) {
+      const newStream = new MediaStream([screenTrack, ...localStream.getAudioTracks()]);
+      localVideo.srcObject = newStream;
+    }
+
+    screenTrack.onended = async () => {
+      const camTrack = localStream.getVideoTracks()[0];
+      for (const id of Object.keys(peers)) {
+        const sender = peers[id].pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) await sender.replaceTrack(camTrack);
+      }
+      const localVideo = document.getElementById('video-local');
+      if (localVideo) localVideo.srcObject = localStream;
+    };
+  } catch (e) {
+    console.warn('Hủy chia sẻ màn hình hoặc lỗi:', e);
+  }
+};
+
+window.addEventListener('beforeunload', () => {
+  try { socket.emit('leave'); } catch {}
+});
