@@ -1,58 +1,26 @@
-// server.js
-const express = require("express");
-const http = require("http");
-const socketIO = require("socket.io");
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIO(server);
+const io = new Server(server);
 
+app.use(express.static('public'));
 
-app.use(express.static("public"));
+io.on('connection', (socket) => {
+  socket.on('join', (room) => {
+    socket.join(room);
+    socket.to(room).emit('new-peer', socket.id);
 
-
-let rooms = {};
-
-io.on("connection", (socket) => {
-    console.log("Client connected:", socket.id);
-
-    
-    socket.on("join-room", (roomId) => {
-        socket.join(roomId);
-        console.log(` ${socket.id} joined room: ${roomId}`);
-
-        
-        socket.to(roomId).emit("user-joined", socket.id);
-
-        
-        if (!rooms[roomId]) {
-            rooms[roomId] = [];
-        }
-        rooms[roomId].push(socket.id);
-
-        
-        socket.emit("existing-users", rooms[roomId].filter(id => id !== socket.id));
+    socket.on('signal', (data) => {
+      io.to(data.to).emit('signal', { from: socket.id, data: data.signal });
     });
 
-    
-    socket.on("signal", (data) => {
-        io.to(data.target).emit("signal", {
-            sender: socket.id,
-            signal: data.signal
-        });
+    socket.on('disconnect', () => {
+      socket.to(room).emit('peer-disconnected', socket.id);
     });
-
-    
-    socket.on("disconnect", () => {
-        console.log("Client disconnected:", socket.id);
-        for (let roomId in rooms) {
-            rooms[roomId] = rooms[roomId].filter(id => id !== socket.id);
-            socket.to(roomId).emit("user-left", socket.id);
-        }
-    });
+  });
 });
 
-
-server.listen(3000, "0.0.0.0", () => {
-    console.log("🚀 Server chạy tại: http://<IP_LAN_của_bạn>:3000");
-});
+server.listen(3000, () => console.log('Server chạy tại http://localhost:3000'));
