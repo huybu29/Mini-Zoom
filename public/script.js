@@ -51,7 +51,8 @@ socket.on('peer-disconnected', (peerId) => {
   if (peers[peerId]) {
     peers[peerId].close();
     delete peers[peerId];
-    document.getElementById(peerId)?.remove();
+    const wrapper = document.getElementById('wrapper-' + peerId);
+    if (wrapper) wrapper.remove();
   }
 });
 
@@ -66,20 +67,38 @@ function createPeer(peerId) {
     }
   };
 
-  pc.ontrack = (event) => {
-    let video = document.getElementById(peerId);
-    if (!video) {
-      video = document.createElement('video');
-      video.id = peerId;
-      video.autoplay = true;
-      video.playsInline = true;
-      remoteVideos.appendChild(video);
-    }
-    video.srcObject = event.streams[0];
-  };
+pc.ontrack = (event) => {
+  let videoWrapper = document.getElementById('wrapper-' + peerId);
+  let video;
+  if (!videoWrapper) {
+    videoWrapper = document.createElement('div');
+    videoWrapper.id = 'wrapper-' + peerId;
+    videoWrapper.style.position = 'relative';
 
-  peers[peerId] = pc;
-  return pc;
+    video = document.createElement('video');
+    video.id = 'video-' + peerId;
+    video.autoplay = true;
+    video.playsInline = true;
+
+    const label = document.createElement('div');
+    label.textContent = peerId;
+    label.style.position = 'absolute';
+    label.style.bottom = '0';
+    label.style.left = '0';
+    label.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    label.style.color = 'white';
+    label.style.padding = '2px 5px';
+    label.style.fontSize = '12px';
+
+    videoWrapper.appendChild(video);
+    videoWrapper.appendChild(label);
+    document.getElementById('remoteVideos').appendChild(videoWrapper);
+  } else {
+    video = document.getElementById('video-' + peerId);
+  }
+
+  video.srcObject = event.streams[0];
+};
 }
 
 
