@@ -1,107 +1,47 @@
 const socket = io();
-const localVideo = document.getElementById('localVideo');
-const remoteVideos = document.getElementById('remoteVideos');
 let localStream;
 let peers = {};
 
 let screenTrack = null;
 let myName = '';
 let myRoom = '';
+const localVideo = document.getElementById('localVideo');
+const remoteVideos = document.getElementById('remoteVideos');
 
+const roomInput = document.getElementById('room');
+const nameInput = document.getElementById('name');
 const joinBtn = document.getElementById('joinBtn');
 const leaveBtn = document.getElementById('leaveBtn');
 const micBtn = document.getElementById('micBtn');
 const camBtn = document.getElementById('camBtn');
 const shareBtn = document.getElementById('shareBtn');
+const rtcConfig = { iceServers: [] };
+function addVideoEl(id, label, stream, isLocal = false) {
+  let tile = document.getElementById('tile-' + id);
+  if (!tile) {
+    tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.id = 'tile-' + id;
 
-document.getElementById('joinBtn').onclick = async () => {
-  const room = document.getElementById('room').value;
-  if (!room) return alert('Nhập tên phòng!');
-
-  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  localVideo.srcObject = localStream;
-
-  socket.emit('join', room);
-};
-
-socket.on('new-peer', async (peerId) => {
-  const pc = createPeer(peerId);
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  socket.emit('signal', { to: peerId, signal: { type: 'offer', sdp: offer } });
-});
-
-socket.on('signal', async ({ from, data }) => {
-  let pc = peers[from];
-  if (!pc) pc = createPeer(from);
-
-  if (data.type === 'offer') {
-    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socket.emit('signal', { to: from, signal: { type: 'answer', sdp: answer } });
-  } else if (data.type === 'answer') {
-    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-  } else if (data.candidate) {
-    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-  }
-});
-
-socket.on('peer-disconnected', (peerId) => {
-  if (peers[peerId]) {
-    peers[peerId].close();
-    delete peers[peerId];
-    const wrapper = document.getElementById('wrapper-' + peerId);
-    if (wrapper) wrapper.remove();
-  }
-});
-
-function createPeer(peerId) {
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-
-  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit('signal', { to: peerId, signal: { candidate: event.candidate } });
-    }
-  };
-
-pc.ontrack = (event) => {
-  let videoWrapper = document.getElementById('wrapper-' + peerId);
-  let video;
-  if (!videoWrapper) {
-    videoWrapper = document.createElement('div');
-    videoWrapper.id = 'wrapper-' + peerId;
-    videoWrapper.style.position = 'relative';
-
-    video = document.createElement('video');
-    video.id = 'video-' + peerId;
+    const video = document.createElement('video');
     video.autoplay = true;
     video.playsInline = true;
+    video.muted = isLocal; // tránh vọng
+    video.id = 'video-' + id;
 
-    const label = document.createElement('div');
-    label.textContent = peerId;
-    label.style.position = 'absolute';
-    label.style.bottom = '0';
-    label.style.left = '0';
-    label.style.backgroundColor = 'rgba(0,0,0,0.5)';
-    label.style.color = 'white';
-    label.style.padding = '2px 5px';
-    label.style.fontSize = '12px';
+    const name = document.createElement('div');
+    name.className = 'label';
+    name.textContent = label;
 
-    videoWrapper.appendChild(video);
-    videoWrapper.appendChild(label);
-    document.getElementById('remoteVideos').appendChild(videoWrapper);
-  } else {
-    video = document.getElementById('video-' + peerId);
+    tile.appendChild(video);
+    tile.appendChild(name);
+    videos.appendChild(tile);
   }
-
-  video.srcObject = event.streams[0];
-};
+  const video = document.getElementById('video-' + id);
+  video.srcObject = stream;
+  return tile;
 }
-
-
+// Join room
 joinBtn.onclick = async () => {
   const room = roomInput.value.trim();
   if (!room) return alert('Nhập tên phòng!');
@@ -130,7 +70,6 @@ joinBtn.onclick = async () => {
   roomInput.disabled = true;
   nameInput.disabled = true;
 };
-
 leaveBtn.onclick = () => {
   // close all peers
   Object.keys(peers).forEach(peerId => {
@@ -156,8 +95,56 @@ leaveBtn.onclick = () => {
   shareBtn.disabled = true;
   joinBtn.disabled = false;
   document.getElementById('room').disabled = false;
-};
+}
+// Socket events
+socket.on('signal', async ({ from, data }) => {
+  let pc = peers[from];
+  if (!pc) pc = createPeer(from);
 
+  if (data.type === 'offer') {
+    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit('signal', { to: from, signal: { type: 'answer', sdp: answer } });
+  } else if (data.type === 'answer') {
+    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+  } else if (data.candidate) {
+    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+  }
+});
+
+socket.on('peer-disconnected', (peerId) => {
+  if (peers[peerId]) {
+    peers[peerId].close();
+    delete peers[peerId];
+    const wrapper = document.getElementById('wrapper-' + peerId);
+    if (wrapper) wrapper.remove();
+  }
+});
+// Peer connections
+function createPeer(peerId) {
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      socket.emit('signal', { to: peerId, signal: { candidate: event.candidate } });
+    }
+  };
+
+pc.ontrack = (event) => {
+  addVideoEl(peerId, peerId, event.streams[0]);
+  }
+  peers[peerId] = pc;
+  return pc;
+  
+}
+
+
+
+
+// Button handles
 micBtn.onclick = () => {
   if (!localStream) return;
   const track = localStream.getAudioTracks()[0];
