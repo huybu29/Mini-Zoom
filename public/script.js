@@ -132,23 +132,30 @@ joinBtn.onclick = async () => {
 };
 
 leaveBtn.onclick = () => {
-  socket.emit('leave');
-  Object.keys(peers).forEach(id => cleanupPeer(id));
+  // close all peers
+  Object.keys(peers).forEach(peerId => {
+    peers[peerId].close();
+    const wrapper = document.getElementById('wrapper-' + peerId);
+    if (wrapper) wrapper.remove();
+  });
+  peers = {};
+
+  // remove local stream
   if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
+    localStream.getTracks().forEach(track => track.stop());
+    localVideo.srcObject = null;
+    localStream = null;
   }
-  localStream = null;
-  screenTrack = null;
-  removePeerUI('local');
 
-  joinBtn.disabled = false;
-  roomInput.disabled = false;
-  nameInput.disabled = false;
+  socket.emit('leave-room'); // optional if server tracks rooms
 
+  // reset buttons
   leaveBtn.disabled = true;
   micBtn.disabled = true;
   camBtn.disabled = true;
   shareBtn.disabled = true;
+  joinBtn.disabled = false;
+  document.getElementById('room').disabled = false;
 };
 
 micBtn.onclick = () => {
