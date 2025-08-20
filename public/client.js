@@ -7,6 +7,8 @@ let myName = '';
 let myRoom = '';
 
 const videos = document.getElementById('videos');
+const userList = document.getElementById('userList');
+const countEl = document.getElementById('count');
 const roomInput = document.getElementById('room');
 const nameInput = document.getElementById('name');
 const joinBtn = document.getElementById('joinBtn');
@@ -19,6 +21,48 @@ const chatInput = document.getElementById("chatInput");
 const sendBtn = document.getElementById("sendBtn");
 const chatMessages = document.getElementById("chatMessages")
 
+const users = {};
+function renderUserList() {
+  userList.innerHTML = '';
+  const arr = Object.values(users);
+  arr.forEach(u => {
+    const div = document.createElement('div');
+    div.className = 'user';
+    div.id = 'user-' + u.id;
+
+    const dot = document.createElement('div');
+    dot.className = 'status-dot ' + (u.mic ? 'mic-on' : 'mic-off');
+    dot.title = u.mic ? 'Mic: ON' : 'Mic: OFF';
+
+    const name = document.createElement('div');
+    name.textContent = u.name + (u.id === 'local' ? ' (you)' : '');
+
+    const cam = document.createElement('div');
+    cam.style.marginLeft = 'auto';
+    cam.textContent = u.cam ? '📷' : '🚫';
+
+    div.appendChild(dot);
+    div.appendChild(name);
+    div.appendChild(cam);
+
+    userList.appendChild(div);
+  });
+  countEl.textContent = arr.length;
+}
+
+function addUser(u) {
+  users[u.id] = u;
+  renderUserList();
+}
+function removeUser(id) {
+  delete users[id];
+  renderUserList();
+}
+function updateUser(u) {
+  const existing = users[u.id] || {};
+  users[u.id] = { ...existing, ...u };
+  renderUserList();
+}
 function addVideoEl(id, label, stream, isLocal = false) {
   let tile = document.getElementById('tile-' + id);
   if (!tile) {
@@ -58,7 +102,6 @@ joinBtn.onclick = async () => {
     console.error(e);
     return alert('Không truy cập được camera/mic.');
   }
-
   // Hiển thị video local
   addVideoEl('local', myName + ' (you)', localStream, true);
 
@@ -99,6 +142,32 @@ leaveBtn.onclick = () => {
   joinBtn.disabled = false;
   document.getElementById('room').disabled = false;
 }
+socket.on('room-users', (arr) => {
+  // arr là danh sách người có trong phòng (do server gửi)
+  // map server list -> local representation (server có id = socketId)
+  removeAllExceptLocal();
+  arr.forEach(u => {
+    if (u.id !== socket.id) addUser({ id: u.id, name: u.name, mic: u.mic, cam: u.cam });
+  });
+});
+
+socket.on('user-joined', (u) => {
+  if (u.id !== socket.id) addUser(u);
+});
+
+socket.on('user-left', (id) => {
+  // xóa user khỏi list & xóa video nếu có
+  removeUser(id);
+  document.getElementById('tile-' + id)?.remove();
+  if (peers[id]) {
+    peers[id].close();
+    delete peers[id];
+  }
+});
+
+socket.on('update-user', (u) => {
+  updateUser(u);
+});
 // Socket events
 socket.on('new-peer', async (peerId) => {
   const pc = createPeer(peerId);
@@ -133,7 +202,6 @@ socket.on('peer-disconnected', (peerId) => {
 // Peer connections
 function createPeer(peerId) {
   const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
   pc.onicecandidate = (event) => {
@@ -161,6 +229,8 @@ micBtn.onclick = () => {
     track.enabled = !track.enabled;
     micBtn.textContent = track.enabled ? 'Tắt mic' : 'Bật mic';
   }
+   updateUser({ id: 'local', mic: track.enabled });
+  socket.emit('toggle-mic', track.enabled);
 };
 
 camBtn.onclick = () => {
@@ -170,6 +240,8 @@ camBtn.onclick = () => {
     track.enabled = !track.enabled;
     camBtn.textContent = track.enabled ? 'Tắt cam' : 'Bật cam';
   }
+  updateUser({ id: 'local', cam: track.enabled });
+  socket.emit('toggle-cam', track.enabled);
 };
 
 shareBtn.onclick = async () => {
