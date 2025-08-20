@@ -15,6 +15,10 @@ const micBtn = document.getElementById('micBtn');
 const camBtn = document.getElementById('camBtn');
 const shareBtn = document.getElementById('shareBtn');
 
+const chatInput = document.getElementById("chatInput");
+const sendBtn = document.getElementById("sendBtn");
+const chatMessages = document.getElementById("chatMessages")
+
 function addVideoEl(id, label, stream, isLocal = false) {
   let tile = document.getElementById('tile-' + id);
   if (!tile) {
@@ -198,6 +202,22 @@ shareBtn.onclick = async () => {
     console.warn('Hủy chia sẻ màn hình hoặc lỗi:', e);
   }
 };
+
+sendBtn.onclick = () => {
+  const message = chatInput.value;
+  if (message.trim() !== "") {
+    socket.emit("chatMessage", {  message });
+    chatInput.value = "";
+  }
+};
+
+// Nhận tin nhắn
+socket.on("chatMessage", (data) => {
+  const msgEl = document.createElement("div");
+  msgEl.innerHTML = `<strong>${data.name}:</strong> ${data.message}`;
+  chatMessages.appendChild(msgEl);
+  chatMessages.scrollTop = chatMessages.scrollHeight; // Tự động cuộn xuống
+});
 
 window.addEventListener('beforeunload', () => {
   try { socket.emit('leave'); } catch {}
