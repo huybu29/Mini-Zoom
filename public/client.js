@@ -1,13 +1,12 @@
 const socket = io();
-let localStream;
+let localStream = null;
 let peers = {};
 
 let screenTrack = null;
 let myName = '';
 let myRoom = '';
-const localVideo = document.getElementById('localVideo');
-const remoteVideos = document.getElementById('remoteVideos');
 
+const videos = document.getElementById('videos');
 const roomInput = document.getElementById('room');
 const nameInput = document.getElementById('name');
 const joinBtn = document.getElementById('joinBtn');
@@ -15,7 +14,7 @@ const leaveBtn = document.getElementById('leaveBtn');
 const micBtn = document.getElementById('micBtn');
 const camBtn = document.getElementById('camBtn');
 const shareBtn = document.getElementById('shareBtn');
-const rtcConfig = { iceServers: [] };
+
 function addVideoEl(id, label, stream, isLocal = false) {
   let tile = document.getElementById('tile-' + id);
   if (!tile) {
@@ -37,9 +36,8 @@ function addVideoEl(id, label, stream, isLocal = false) {
     tile.appendChild(name);
     videos.appendChild(tile);
   }
-  const video = document.getElementById('video-' + id);
-  video.srcObject = stream;
-  return tile;
+  document.getElementById('video-' + id).srcObject = stream;
+
 }
 // Join room
 joinBtn.onclick = async () => {
@@ -82,8 +80,9 @@ leaveBtn.onclick = () => {
   // remove local stream
   if (localStream) {
     localStream.getTracks().forEach(track => track.stop());
-    localVideo.srcObject = null;
-    localStream = null;
+   const localEl = document.getElementById('video-local');
+  if (localEl) localEl.srcObject = null;
+  localStream = null;
   }
 
   socket.emit('leave-room'); // optional if server tracks rooms
@@ -97,6 +96,12 @@ leaveBtn.onclick = () => {
   document.getElementById('room').disabled = false;
 }
 // Socket events
+socket.on('new-peer', async (peerId) => {
+  const pc = createPeer(peerId);
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  socket.emit('signal', { to: peerId, signal: { type: 'offer', sdp: offer } });
+});
 socket.on('signal', async ({ from, data }) => {
   let pc = peers[from];
   if (!pc) pc = createPeer(from);
@@ -174,10 +179,10 @@ shareBtn.onclick = async () => {
       if (sender) await sender.replaceTrack(screenTrack);
     }
 
-    const localVideo = document.getElementById('video-local');
-    if (localVideo) {
+    const localEl = document.getElementById('video-local');
+    if (localEl) {
       const newStream = new MediaStream([screenTrack, ...localStream.getAudioTracks()]);
-      localVideo.srcObject = newStream;
+      localEl.srcObject = newStream;
     }
 
     screenTrack.onended = async () => {
@@ -186,7 +191,7 @@ shareBtn.onclick = async () => {
         const sender = peers[id].pc.getSenders().find(s => s.track && s.track.kind === 'video');
         if (sender) await sender.replaceTrack(camTrack);
       }
-      const localVideo = document.getElementById('video-local');
+      const localVideo = document.    getElementById('video-local');
       if (localVideo) localVideo.srcObject = localStream;
     };
   } catch (e) {

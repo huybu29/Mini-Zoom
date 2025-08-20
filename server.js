@@ -9,18 +9,32 @@ const io = new Server(server);
 app.use(express.static('public'));
 
 io.on('connection', (socket) => {
-  socket.on('join', (room) => {
-    socket.join(room);
+  socket.on('join', ({room, name}) => {
+   
+    socket.data.room = room;
+    socket.data.name = name;
+     socket.join(room);
     socket.to(room).emit('new-peer', socket.id);
+  });
+  socket.on('signal', ({ to, signal }) => {
+    io.to(to).emit('signal', { from: socket.id, data: signal });
+  });
 
-    socket.on('signal', (data) => {
-      io.to(data.to).emit('signal', { from: socket.id, data: data.signal });
-    });
+    socket.on('leave', () => {
+    if (socket.data.room) {
+      socket.to(socket.data.room).emit('peer-disconnected', socket.id);
+      socket.leave(socket.data.room);
+      socket.data.room = null;
+    }
+  });
 
-    socket.on('disconnect', () => {
-      socket.to(room).emit('peer-disconnected', socket.id);
-    });
+  socket.on('disconnect', () => {
+    if (socket.data.room) {
+      socket.to(socket.data.room).emit('peer-disconnected', socket.id);
+    }
   });
 });
 
-server.listen(3000, () => console.log('Server chạy tại http://localhost:3000'));
+server.listen(3000, () => {
+  console.log('Server chạy tại http://localhost:3000');
+})
